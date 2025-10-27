@@ -1,0 +1,52 @@
+version: '3.9'
+
+services:
+  # LiveKit Server
+  livekit:
+    image: livekit/livekit-server:latest
+    command: --config /etc/livekit.yaml
+    ports:
+      - "7880:7880"   # HTTP
+      - "7881:7881"   # TURN/UDP
+      - "7882:7882/udp"  # WebRTC/UDP
+      - "50000-50100:50000-50100/udp"  # RTC Port Range
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml
+    networks:
+      - livekit-network
+    restart: unless-stopped
+
+  # Python AI Agent Backend
+  agent:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    depends_on:
+      - livekit
+    environment:
+      - LIVEKIT_URL=ws://livekit:7880
+      - LIVEKIT_API_KEY=${LIVEKIT_API_KEY:-devkey}
+      - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET:-secret}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - VISION_ENABLED=true
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./backend:/app
+      - agent-logs:/app/logs
+    networks:
+      - livekit-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+networks:
+  livekit-network:
+    driver: bridge
+
+volumes:
+  agent-logs:
